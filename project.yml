@@ -1,0 +1,38 @@
+# Приложение курьера для iPhone (владелец 17.10.2026). Xcode-проект собирается XcodeGen на macOS в GitHub Actions (.github/workflows/testflight.yml).
+name: Courier
+options:
+  bundleIdPrefix: ru.mise
+  deploymentTarget: { iOS: "15.0" }
+targets:
+  Courier:
+    type: application
+    platform: iOS
+    sources: [Courier]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.mise.courier
+        PRODUCT_NAME: Курьер
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Courier/Info.plist
+    info:
+      path: Courier/Info.plist
+      properties:
+        CFBundleDisplayName: Курьер
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [location]
+        NSLocationWhenInUseUsageDescription: "Геопозиция нужна, чтобы директор ресторана видел вас на карте во время смены и чтобы отмечать доставку у адреса."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Во время смены приложение передаёт геопозицию директору ресторана и с погасшим экраном. Остановить можно кнопкой «Выйти»."
+        CFBundleURLTypes:
+          - CFBundleURLName: ru.mise.courier
+            CFBundleURLSchemes: [misecourier]

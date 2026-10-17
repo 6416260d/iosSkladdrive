@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Курьер</title>
+<style>
+body { margin: 0; font: 16px/1.4 -apple-system, Roboto, sans-serif; background: #f2f4f7; color: #15191f; padding: 24px 16px; }
+h1 { font-size: 22px; margin: 8px 0 4px; } p { color: #6b7280; margin: 0 0 16px; }
+button { display: block; width: 100%; text-align: left; border: 1px solid #d8dde4; background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px; font: inherit; color: inherit; }
+button b { display: block; font-size: 17px; } button span { color: #6b7280; font-size: 14px; }
+</style></head>
+<body>
+<h1>🛵 Курьер</h1>
+<p>Выберите, где вы работаете. Потом войдите по логину и паролю, которые выдал директор.</p>
+<div id="list"></div>
+<script>
+const S = JSON.parse(window.MiseApp ? MiseApp.servers() : "[]");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+document.getElementById("list").innerHTML = S.map((s, i) => `<button data-i="${i}"><b>${esc(s.name)}</b><span>${esc((s.rests || []).join(", "))}</span></button>`).join("")
+  || "<p>Список пуст — скачайте приложение заново со страницы курьера.</p>";
+document.querySelectorAll("button").forEach(b => b.onclick = () => MiseApp.choose(S[+b.dataset.i].url));
+</script>
+</body></html>

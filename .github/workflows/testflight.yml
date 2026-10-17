@@ -1,0 +1,41 @@
+# Сборка приложения курьера для iPhone и выкладка в TestFlight. Запускается при push (prepare.sh на сервере) или вручную (Actions → Run workflow).
+# Секреты репозитория (Settings → Secrets and variables → Actions): APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (текст файла AuthKey_….p8).
+name: TestFlight
+on:
+  push: { branches: [main] }
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode-проект
+        run: brew install xcodegen && xcodegen generate
+      - name: Ключ App Store Connect
+        env: { P8: "${{ secrets.ASC_KEY_P8 }}" }
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$P8" > "$RUNNER_TEMP/keys/AuthKey.p8"
+      - name: Сборка
+        run: |
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8"
+                -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}")
+          xcodebuild -project Courier.xcodeproj -scheme Courier -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Courier.xcarchive" archive \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="${{ github.run_number }}" "${AUTH[@]}"
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Courier.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/out" "${AUTH[@]}"
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
