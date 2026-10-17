@@ -95,7 +95,9 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
 
     // window.open: свой адрес — в этом же окне, чужой — наружу
     func webView(_ w: WKWebView, createWebViewWith c: WKWebViewConfiguration, for a: WKNavigationAction, windowFeatures f: WKWindowFeatures) -> WKWebView? {
-        if let u = a.request.url { own(u) ? w.load(URLRequest(url: u)) : UIApplication.shared.open(u) }
+        if let u = a.request.url {
+            if own(u) { w.load(URLRequest(url: u)) } else { UIApplication.shared.open(u) }
+        }
         return nil
     }
 
