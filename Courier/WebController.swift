@@ -11,6 +11,7 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
 
     override func loadView() {
         let cfg = WKWebViewConfiguration()
+        cfg.allowsInlineMediaPlayback = true
         cfg.websiteDataStore = .default()
         cfg.applicationNameForUserAgent = "MiseCourier/\(Self.version) iOS"
         let js = """
@@ -19,7 +20,7 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
           platform: "ios",
           version: () => \(json(Self.version)),
           servers: () => \(json(Servers.json)),
-          server: () => \(json(Servers.current?.url ?? "")),
+          server: () => location.protocol === "https:" ? location.origin : "",
           status: () => JSON.stringify(window.__miseStatus || {}),
           start: () => webkit.messageHandlers.mise.postMessage({cmd: "start"}),
           stop: () => webkit.messageHandlers.mise.postMessage({cmd: "stop"}),
@@ -33,7 +34,18 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = true
-        view = web
+        let container = UIView()
+        container.backgroundColor = .systemBackground
+        container.addSubview(web)
+        web.translatesAutoresizingMaskIntoConstraints = false
+        let safe = container.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            web.topAnchor.constraint(equalTo: safe.topAnchor),
+            web.bottomAnchor.constraint(equalTo: safe.bottomAnchor),
+            web.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
+            web.trailingAnchor.constraint(equalTo: safe.trailingAnchor)
+        ])
+        view = container
         Geo.shared.onChange = { [weak self] in self?.pushStatus() }
     }
 
@@ -43,9 +55,8 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
         return String(a.dropFirst().dropLast())
     }
 
-    func open() {
+    func openWorkspace() {
         loadViewIfNeeded()
-        if Servers.current == nil, Servers.all.filter({ $0.start == nil }).count == 1 { Servers.current = Servers.all.first }
         if let s = Servers.current, let u = URL(string: s.url + (s.start ?? "/courier")) {
             web.load(URLRequest(url: u))
         } else if let f = Bundle.main.url(forResource: "choose", withExtension: "html") {
@@ -55,10 +66,10 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
 
     func take(_ url: URL) {
         let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-        if url.scheme == "misecourier", let s = Servers.known(q?.first { $0.name == "u" }?.value) {
+        if url.scheme == "misecourier", url.host == "open", let s = Servers.known(q?.first { $0.name == "u" }?.value) {
             if s.url != Servers.current?.url { Geo.shared.stop(); Servers.current = s }
         }
-        open()
+        openWorkspace()
     }
 
     func pushStatus() {
@@ -68,40 +79,78 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate,
     }
 
     func userContentController(_ uc: WKUserContentController, didReceive msg: WKScriptMessage) {
-        guard let b = msg.body as? [String: Any], let cmd = b["cmd"] as? String else { return }
+        guard msg.frameInfo.isMainFrame, let from = msg.frameInfo.request.url, own(from),
+              let b = msg.body as? [String: Any], let cmd = b["cmd"] as? String else { return }
+        if from.isFileURL {
+            guard cmd == "choose", let s = Servers.known(b["url"] as? String) else { return }
+            Geo.shared.stop()
+            Servers.current = s
+            openWorkspace()
+            return
+        }
+        guard from.scheme == "https" else { return }
         switch cmd {
         case "start": Geo.shared.start()
         case "stop": Geo.shared.stop()
         case "change":
-            Geo.shared.stop(); Servers.current = nil; open()
-        case "choose":
-            if let s = Servers.known(b["url"] as? String) { Geo.shared.stop(); Servers.current = s; open() }
+            Geo.shared.stop()
+            Servers.current = nil
+            openWorkspace()
         default: break
         }
         pushStatus()
     }
 
     private func own(_ url: URL?) -> Bool {
-        guard let u = url?.absoluteString else { return false }
-        return url?.isFileURL == true || u == "about:blank" || (Servers.current.map { u.hasPrefix($0.url + "/") || u == $0.url } ?? false)
+        guard let u = url else { return false }
+        if u.isFileURL { return Servers.current == nil && u.standardizedFileURL == Bundle.main.url(forResource: "choose", withExtension: "html")?.standardizedFileURL }
+        guard let server = Servers.current.flatMap({ URL(string: $0.url) }) else { return false }
+        return u.scheme == "https" && u.host == server.host && (u.port ?? 443) == (server.port ?? 443)
     }
 
     // свой сервер — здесь; Яндекс Карты, t.me и прочее — наружу
     func webView(_ w: WKWebView, decidePolicyFor a: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if own(a.request.url) { decisionHandler(.allow); return }
-        if let u = a.request.url { UIApplication.shared.open(u) }
+        if a.targetFrame?.isMainFrame != false, let u = a.request.url { openExternal(u) }
         decisionHandler(.cancel)
     }
 
     // window.open: свой адрес — в этом же окне, чужой — наружу
     func webView(_ w: WKWebView, createWebViewWith c: WKWebViewConfiguration, for a: WKNavigationAction, windowFeatures f: WKWindowFeatures) -> WKWebView? {
         if let u = a.request.url {
-            if own(u) { w.load(URLRequest(url: u)) } else { UIApplication.shared.open(u) }
+            if own(u) { w.load(a.request) } else { openExternal(u) }
         }
         return nil
     }
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) { pushStatus() }
+
+    private func openExternal(_ url: URL) {
+        if ["https", "http", "tel", "tg", "maps", "yandexmaps", "yandexnavi"].contains(url.scheme?.lowercased() ?? "") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError error: Error) {
+        showLoadError(error)
+    }
+
+    func webView(_ w: WKWebView, didFail n: WKNavigation!, withError error: Error) {
+        showLoadError(error)
+    }
+
+    private func showLoadError(_ error: Error) {
+        let e = error as NSError
+        guard e.domain == NSURLErrorDomain, e.code != NSURLErrorCancelled, presentedViewController == nil else { return }
+        let alert = UIAlertController(title: "Не удалось открыть заказы", message: "Проверьте подключение к интернету.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Повторить", style: .default) { _ in self.openWorkspace() })
+        alert.addAction(UIAlertAction(title: "Другой город", style: .default) { _ in
+            Geo.shared.stop()
+            Servers.current = nil
+            self.openWorkspace()
+        })
+        present(alert, animated: true)
+    }
 
     // окна страницы: без них confirm() в WKWebView молча возвращает false — «Доставлен» не нажимался бы
     func webView(_ w: WKWebView, runJavaScriptAlertPanelWithMessage m: String, initiatedByFrame f: WKFrameInfo, completionHandler done: @escaping () -> Void) {

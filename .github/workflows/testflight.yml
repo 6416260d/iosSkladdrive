@@ -1,20 +1,43 @@
-# Сборка приложения курьера для iPhone и выкладка в TestFlight. Запускается при push (prepare.sh на сервере) или вручную (Actions → Run workflow).
-# Секреты репозитория (Settings → Secrets and variables → Actions): APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (текст файла AuthKey_….p8).
 name: TestFlight
 on:
   push: { branches: [main] }
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Загрузить подписанную сборку в TestFlight
+        type: boolean
+        default: false
+permissions:
+  contents: read
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Xcode-проект
-        run: brew install xcodegen && xcodegen generate
+      - name: Сборка для симулятора iPhone
+        run: |
+          xcodebuild -version
+          xcodebuild -project Courier.xcodeproj -scheme Courier -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/Courier" \
+            CODE_SIGNING_ALLOWED=NO build
+          ditto -c -k --keepParent "$RUNNER_TEMP/Courier/Build/Products/Debug-iphonesimulator/Курьер.app" "$RUNNER_TEMP/Courier-Simulator.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Courier-Simulator
+          path: ${{ runner.temp }}/Courier-Simulator.zip
+  testflight:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.upload
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
       - name: Ключ App Store Connect
         env: { P8: "${{ secrets.ASC_KEY_P8 }}" }
         run: |
+          : "${P8:?Добавьте ASC_KEY_P8 в секреты репозитория}"
+          umask 077
           mkdir -p "$RUNNER_TEMP/keys"
           printf '%s\n' "$P8" > "$RUNNER_TEMP/keys/AuthKey.p8"
       - name: Сборка

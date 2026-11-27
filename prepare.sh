@@ -1,6 +1,6 @@
 #!/bin/bash
 # Подготовка приложения курьера для iPhone на сервере: servers.json (основной + регионы + демо для проверки Apple), иконка, choose.html →
-# коммит → push в GitHub; сборку и выкладку в TestFlight делает GitHub Actions (.github/workflows/testflight.yml) на macOS.
+# коммит → push в GitHub; сборку для симулятора делает GitHub Actions (.github/workflows/testflight.yml) на macOS.
 # Новый регион или правка приложения → запустить снова. Доступа к Apple на сервере нет: ключ App Store Connect — только в секретах репозитория GitHub.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -39,11 +39,11 @@ Path("Courier/Assets.xcassets/Contents.json").write_text(json.dumps({"info": {"a
 PY
 cp ../courier_app/assets/choose.html Courier/choose.html
 [ -d .git ] || { git init -q -b main; git config user.email "courier@mise"; git config user.name "Сервер склада"; }
-git add -A
+git add -- Courier Courier.xcodeproj .github/workflows/testflight.yml .gitignore prepare.sh project.yml README.md
 git diff --cached --quiet || git commit -q -m "Приложение курьера для iPhone: $(date '+%d.%m.%Y %H:%M')"
 if git remote get-url origin >/dev/null 2>&1; then
   GIT_SSH_COMMAND="ssh -i $HOME/.ssh/courier_ios_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" git push -q origin main
-  echo "отправлено в GitHub — сборка в TestFlight пошла (вкладка Actions репозитория)"
+  echo "отправлено в GitHub — проверка сборки запущена (вкладка Actions репозитория)"
 else
   echo "репозиторий GitHub ещё не подключён: git remote add origin git@github.com:<владелец>/<репозиторий>.git"
 fi

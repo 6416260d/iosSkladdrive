@@ -4,7 +4,7 @@ import WebKit
 
 /// Геопозиция курьера на карту «Нагрузки», и с погасшим экраном (UIBackgroundModes location, синий значок вверху):
 /// POST /api/courier/geo {src: "ios"} не чаще раза в 30 с (сервер ответил off — раз в 2 мин), вход — cookie страницы из WKWebView.
-final class Geo: NSObject, CLLocationManagerDelegate {
+final class Geo: NSObject, CLLocationManagerDelegate, URLSessionTaskDelegate {
     static let shared = Geo()
     static let every: TimeInterval = 30, offEvery: TimeInterval = 120, maxFails = 3
 
@@ -14,6 +14,13 @@ final class Geo: NSObject, CLLocationManagerDelegate {
     private(set) var sentAt: TimeInterval = 0
     private var nextAt: TimeInterval = 0
     private var busy = false
+    private var generation = 0
+    private var task: URLSessionDataTask?
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpShouldSetCookies = false
+        return URLSession(configuration: config, delegate: self, delegateQueue: .main)
+    }()
     private var loginFails = 0
     var onChange: (() -> Void)?
 
@@ -27,6 +34,7 @@ final class Geo: NSObject, CLLocationManagerDelegate {
     }
 
     func start() {
+        guard !running else { return }
         running = true
         loginFails = 0
         nextAt = 0
@@ -38,7 +46,12 @@ final class Geo: NSObject, CLLocationManagerDelegate {
     }
 
     func stop() {
+        generation += 1
         running = false
+        busy = false
+        task?.cancel()
+        task = nil
+        sentAt = 0
         lm.stopUpdatingLocation()
         set("wait")
     }
@@ -59,7 +72,8 @@ final class Geo: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
-        guard running, let l = locs.last, !busy, Date().timeIntervalSince1970 >= nextAt else { return }
+        guard running, let l = locs.last, l.horizontalAccuracy >= 0, abs(l.timestamp.timeIntervalSinceNow) < 60,
+              !busy, Date().timeIntervalSince1970 >= nextAt else { return }
         send(l)
     }
 
@@ -75,21 +89,28 @@ final class Geo: NSObject, CLLocationManagerDelegate {
     private func send(_ l: CLLocation) {
         guard let srv = Servers.current?.url, let url = URL(string: srv + "/api/courier/geo") else { return }
         busy = true
+        let active = generation
         let bg = UIApplication.shared.beginBackgroundTask(withName: "geo")
         WKWebsiteDataStore.default().httpCookieStore.getAllCookies { all in
-            let host = url.host ?? ""
-            let ck = all.filter { host == $0.domain || host.hasSuffix("." + $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) }
-                .map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+            guard self.generation == active else {
+                UIApplication.shared.endBackgroundTask(bg)
+                return
+            }
+            // Сессии ресторанов выдаются для точного хоста. У основного сервера и региона одинаковое имя cookie.
+            let cookies = all.filter { $0.domain == url.host && ["sklad_session", "demo_sid"].contains($0.name) }
             var r = URLRequest(url: url, timeoutInterval: 20)
             r.httpMethod = "POST"
             r.setValue("application/json", forHTTPHeaderField: "Content-Type")
             r.setValue("1", forHTTPHeaderField: "X-Sklad")
             r.setValue("MiseCourier/\(WebController.version) iOS", forHTTPHeaderField: "User-Agent")
-            if !ck.isEmpty { r.setValue(ck, forHTTPHeaderField: "Cookie") }
+            for (name, value) in HTTPCookie.requestHeaderFields(with: cookies) { r.setValue(value, forHTTPHeaderField: name) }
             r.httpBody = try? JSONSerialization.data(withJSONObject: ["lat": l.coordinate.latitude, "lon": l.coordinate.longitude,
                                                                       "acc": Int(l.horizontalAccuracy.rounded()), "src": "ios"])
-            URLSession.shared.dataTask(with: r) { data, resp, err in
+            self.task = self.session.dataTask(with: r) { data, resp, err in
                 DispatchQueue.main.async {
+                    defer { UIApplication.shared.endBackgroundTask(bg) }
+                    guard self.generation == active else { return }
+                    self.task = nil
                     self.busy = false
                     let now = Date().timeIntervalSince1970
                     self.nextAt = now + Self.every
@@ -108,14 +129,21 @@ final class Geo: NSObject, CLLocationManagerDelegate {
                         if j?["off"] as? Bool == true {
                             self.nextAt = now + Self.offEvery
                             self.set("off")
-                        } else {
+                        } else if j?["ok"] as? Bool == true {
                             self.sentAt = now
                             self.set("on")
+                        } else {
+                            self.set("err")
                         }
                     }
-                    UIApplication.shared.endBackgroundTask(bg)
                 }
-            }.resume()
+            }
+            self.task?.resume()
         }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }

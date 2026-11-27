@@ -9,7 +9,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = WebController.shared
         window?.makeKeyAndVisible()
-        if let url = opts?[.url] as? URL { WebController.shared.take(url) } else { WebController.shared.open() }
+        if let url = opts?[.url] as? URL { WebController.shared.take(url) } else { WebController.shared.openWorkspace() }
         return true
     }
 

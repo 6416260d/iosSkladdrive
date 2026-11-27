@@ -1,4 +1,4 @@
-# Приложение курьера для iPhone (владелец 17.10.2026). Xcode-проект собирается XcodeGen на macOS в GitHub Actions (.github/workflows/testflight.yml).
+# Спецификация для повторной генерации XcodeGen. Для запуска и сборки используется Courier.xcodeproj.
 name: Courier
 options:
   bundleIdPrefix: ru.mise
@@ -18,7 +18,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
-        GENERATE_INFOPLIST_FILE: NO
+        GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Courier/Info.plist
     info:
       path: Courier/Info.plist
@@ -31,6 +31,7 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIBackgroundModes: [location]
+        NSCameraUsageDescription: "Камера нужна для фотоотчёта о распространении листовок и регистрации сотрудника."
         NSLocationWhenInUseUsageDescription: "Геопозиция нужна, чтобы директор ресторана видел вас на карте во время смены и чтобы отмечать доставку у адреса."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Во время смены приложение передаёт геопозицию директору ресторана и с погасшим экраном. Остановить можно кнопкой «Выйти»."
         CFBundleURLTypes:
