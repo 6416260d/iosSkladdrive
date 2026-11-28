@@ -43,6 +43,11 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = ru.mise.courier
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Info.plist")" = 1.0
           test -s "$app/PrivacyInfo.xcprivacy"
+          ditto -c -k --keepParent "$RUNNER_TEMP/Courier-check.xcarchive" "$RUNNER_TEMP/Courier-iPhone-unsigned.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Courier-iPhone-unsigned
+          path: ${{ runner.temp }}/Courier-iPhone-unsigned.zip
   testflight:
     needs: build
     if: github.event_name == 'workflow_dispatch' && inputs.upload
