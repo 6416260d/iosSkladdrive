@@ -16,6 +16,20 @@ final class StoreScreens: XCTestCase {
                       "\(description). Visible buttons: \(app.buttons.allElementsBoundByIndex.prefix(12).map { $0.label })")
     }
 
+    private func acceptLocationPrompt() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for host in [app, springboard] {
+            let alert = host.alerts.firstMatch
+            if alert.waitForExistence(timeout: 2) {
+                let allow = alert.buttons.matching(NSPredicate(format: "label IN %@", [
+                    "Allow", "Allow Once", "Allow While Using App", "Разрешить", "Однократно", "При использовании"
+                ])).firstMatch
+                if allow.exists { allow.tap() }
+                XCTAssertFalse(alert.exists, "Unexpected system alert while capturing: " + alert.label)
+            }
+        }
+    }
+
     func testDemoScreens() throws {
         continueAfterFailure = false
         app.launch()
@@ -27,6 +41,7 @@ final class StoreScreens: XCTestCase {
         start.tap()
         let order = button("Забрать в доставку")
         require(order, "Seeded order in the new workspace", timeout: 180)
+        acceptLocationPrompt()
         try save("01-orders")
         let history = button("История")
         require(history, "Delivery history")
