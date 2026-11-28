@@ -52,7 +52,20 @@ build=(xcodebuild -quiet -project "$work/Courier.xcodeproj" -scheme StoreScreens
 "${build[@]}" build-for-testing
 xcrun simctl install "$udid" "$work/Build/Build/Products/Debug-iphonesimulator/Курьер.app"
 xcrun simctl privacy "$udid" grant location-always ru.mise.courier
-"${build[@]}" test-without-building
+if ! "${build[@]}" -resultBundlePath "$work/capture.xcresult" test-without-building 2>&1 | tee "$work/uitest.log"; then
+  xcrun xcresulttool get test-results summary --path "$work/capture.xcresult" > "$work/failures.json" || true
+  python3 - "$work/failures.json" "$work/uitest.log" <<'PYTHON'
+import json,sys
+from pathlib import Path
+try:
+    result=json.loads(Path(sys.argv[1]).read_text())
+    for f in result.get('testFailures',[]): print('::error::'+str(f.get('failureText',f))[:1000].replace('%','%25').replace('\n','%0A'))
+except (OSError,ValueError): pass
+for line in [s for s in Path(sys.argv[2]).read_text().splitlines() if 'error:' in s or 'failed on' in s][-8:]:
+    print('::error::'+line[:450])
+PYTHON
+  exit 1
+fi
 data="$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Containers/Data"
 for name in 01-orders 02-history; do
   shot=$(find "$data" -type f -path "*/Documents/$name.png" -print -quit)

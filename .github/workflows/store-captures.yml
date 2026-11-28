@@ -6,6 +6,23 @@ on:
 permissions:
   contents: read
 jobs:
+  previous-diagnostic:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Read failure of first capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/6416260d/iosSkladdrive/actions/jobs/140904219799/logs > "$RUNNER_TEMP/ios-log"
+          python3 - "$RUNNER_TEMP/ios-log" <<'PYTHON'
+          import sys
+          from pathlib import Path
+          lines=Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          for s in [s for s in lines if any(k in s for k in ('error:', 'XCTAssert', 'Test case', 'failed on', 'Failed to', 'Testing failed'))][-12:]:
+              print('::warning::'+s[:650].replace('%','%25'))
+          PYTHON
   capture:
     runs-on: macos-26
     timeout-minutes: 35

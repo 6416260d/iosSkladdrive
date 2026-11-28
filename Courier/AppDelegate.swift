@@ -22,11 +22,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 /// Серверы, вшитые при сборке (servers.json: основной, регионы, демо); выбранный — в UserDefaults.
 enum Servers {
-    struct Item: Codable { let name: String; let url: String; let rests: [String]?; let start: String? }
+    struct Item: Codable {
+        let name: String
+        let url: String
+        let rests: [String]?
+        let start: String?
+        let storeReady: Bool?
+    }
 
     static let all: [Item] = {
         guard let f = Bundle.main.url(forResource: "servers", withExtension: "json"), let d = try? Data(contentsOf: f) else { return [] }
-        return (try? JSONDecoder().decode([Item].self, from: d)) ?? []
+        let servers = (try? JSONDecoder().decode([Item].self, from: d)) ?? []
+        #if DEBUG
+        return servers
+        #else
+        return servers.filter { $0.storeReady == true }
+        #endif
     }()
 
     static var current: Item? {
