@@ -3,38 +3,44 @@ import XCTest
 final class StoreScreens: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "ru.mise.courier")
 
+    private func button(_ text: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    private func label(_ text: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    private func require(_ element: XCUIElement, _ description: String, timeout: TimeInterval = 45) {
+        XCTAssertTrue(element.waitForExistence(timeout: timeout),
+                      "\(description). Visible buttons: \(app.buttons.allElementsBoundByIndex.prefix(12).map { $0.label })")
+    }
+
     func testDemoScreens() throws {
         continueAfterFailure = false
         app.launch()
-        let demo = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Демо")).first
-        XCTAssertTrue(demo.waitForExistence(timeout: 20))
+        let demo = button("Демо")
+        require(demo, "Demo workspace selector")
         demo.tap()
-        let start = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Войти в демо")).first
-        XCTAssertTrue(start.waitForExistence(timeout: 60))
+        let start = button("Войти в демо")
+        require(start, "Demo sign-in")
         start.tap()
-        let history = app.buttons["История"]
-        XCTAssertTrue(history.waitForExistence(timeout: 150))
-        let week = app.buttons["7 дней"]
-        history.tap()
-        XCTAssertTrue(week.waitForExistence(timeout: 20))
-        week.tap()
-        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Демо-Химки"))
-        XCTAssertTrue(rows.first.waitForExistence(timeout: 45))
-        let loaded = NSPredicate { _, _ in
-            !self.app.staticTexts["Загружаю…"].exists && !self.app.staticTexts["Доставленных заказов нет"].exists
-        }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: loaded, object: nil)], timeout: 45), .completed)
-        try save("02-history")
-        let open = app.buttons.containing(NSPredicate(format: "label BEGINSWITH %@", "Открытые")).first
-        open.tap()
-        let title = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Готовые заказы доставки")).first
-        XCTAssertTrue(title.waitForExistence(timeout: 30))
+        let order = button("Забрать в доставку")
+        require(order, "Seeded order in the new workspace", timeout: 180)
         try save("01-orders")
-        let logout = app.buttons["Выйти"]
+        let history = button("История")
+        require(history, "Delivery history")
+        history.tap()
+        let week = button("7 дней")
+        require(week, "History date range")
+        week.tap()
+        require(label("Доставлено:"), "Historical deliveries have loaded")
+        try save("02-history")
+        let logout = button("Выйти")
         if logout.exists {
             logout.tap()
             let yes = app.alerts.buttons["Да"]
-            if yes.waitForExistence(timeout: 4) { yes.tap() }
+            if yes.waitForExistence(timeout: 5) { yes.tap() }
         }
     }
 
