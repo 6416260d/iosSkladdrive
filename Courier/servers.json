@@ -1,6 +1,7 @@
 [
  {
   "name": "Москва и область",
+  "storeReady": true,
   "url": "https://194-180-189-112.sslip.io",
   "rests": [
    "Видное",
@@ -11,6 +12,7 @@
  },
  {
   "name": "Владимир",
+  "storeReady": false,
   "url": "https://vladimir.194-180-189-112.sslip.io",
   "rests": [
    "Киевская",
@@ -21,6 +23,7 @@
  },
  {
   "name": "Демо (знакомство, без настоящих заказов)",
+  "storeReady": true,
   "url": "https://demo.194-180-189-112.sslip.io",
   "rests": [],
   "start": "/courier"

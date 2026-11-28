@@ -1,10 +1,10 @@
 name: TestFlight
 on:
-  push: { branches: [main] }
+  push: { branches: [main, release/appstore-1.0] }
   workflow_dispatch:
     inputs:
       upload:
-        description: Загрузить подписанную сборку в TestFlight
+        description: Загрузить подписанную сборку в App Store Connect
         type: boolean
         default: false
 permissions:
@@ -26,6 +26,15 @@ jobs:
         with:
           name: Courier-Simulator
           path: ${{ runner.temp }}/Courier-Simulator.zip
+      - name: Проверка Release для iPhone
+        run: |
+          xcodebuild -project Courier.xcodeproj -scheme Courier -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Courier-check.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO archive
+          app="$RUNNER_TEMP/Courier-check.xcarchive/Products/Applications/Курьер.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = ru.mise.courier
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Info.plist")" = 1.0
+          test -s "$app/PrivacyInfo.xcprivacy"
   testflight:
     needs: build
     if: github.event_name == 'workflow_dispatch' && inputs.upload
