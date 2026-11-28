@@ -1,0 +1,46 @@
+name: App Store screenshots
+on:
+  push:
+    branches: [appstore-captures-1-0]
+    paths-ignore: ['store/ru-RU/screenshots/**']
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+      - name: Capture the Demo workspace
+        run: bash store/screenshots/capture.sh "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Courier-App-Store-ru
+          path: ${{ runner.temp }}/screens/*.jpg
+          if-no-files-found: error
+  save:
+    needs: capture
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: Courier-App-Store-ru
+          path: store/ru-RU/screenshots
+      - name: Record the two demo screenshots
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- store/ru-RU/screenshots/01-orders.jpg store/ru-RU/screenshots/02-history.jpg
+          if ! git diff --cached --quiet; then
+            git commit -m 'Сохранить снимки демо приложения из симулятора iPhone'
+            git push origin HEAD:refs/heads/appstore-captures-1-0
+          fi
