@@ -13,8 +13,16 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 40
+    env:
+      HAS_SIGNING_SETTINGS: ${{ secrets.APPLE_TEAM_ID != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Настройки подписи Apple заданы
+        if: env.HAS_SIGNING_SETTINGS == 'true'
+        run: echo 'Четыре настройки подписи заданы. Их действительность проверяется при подписанной загрузке.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Требуются настройки подписи Apple
+        if: env.HAS_SIGNING_SETTINGS != 'true'
+        run: echo 'Для подписанной загрузки добавьте APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID и ASC_KEY_P8 в секреты этого репозитория.' >> "$GITHUB_STEP_SUMMARY"
       - name: Сборка для симулятора iPhone
         run: |
           xcodebuild -version
