@@ -6,23 +6,6 @@ on:
 permissions:
   contents: read
 jobs:
-  previous-diagnostic:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-    steps:
-      - name: Read failure of first capture
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/6416260d/iosSkladdrive/actions/jobs/140904219799/logs > "$RUNNER_TEMP/ios-log"
-          python3 - "$RUNNER_TEMP/ios-log" <<'PYTHON'
-          import sys
-          from pathlib import Path
-          lines=Path(sys.argv[1]).read_text(errors='replace').splitlines()
-          for s in [s for s in lines if any(k in s for k in ('error:', 'XCTAssert', 'Test case', 'failed on', 'Failed to', 'Testing failed'))][-12:]:
-              print('::warning::'+s[:650].replace('%','%25'))
-          PYTHON
   capture:
     runs-on: macos-26
     timeout-minutes: 35
@@ -33,7 +16,19 @@ jobs:
       - name: XcodeGen
         run: command -v xcodegen || brew install xcodegen
       - name: Capture the Demo workspace
-        run: bash store/screenshots/capture.sh "$RUNNER_TEMP/screens"
+        run: |
+          set -o pipefail
+          if ! bash store/screenshots/capture.sh "$RUNNER_TEMP/screens" 2>&1 | tee "$RUNNER_TEMP/capture.log"; then
+            python3 - "$RUNNER_TEMP/capture.log" <<'PYTHON'
+          import sys
+          from pathlib import Path
+          lines=Path(sys.argv[1]).read_text().splitlines()
+          keep=[s for s in lines if any(t in s.lower() for t in ('error:', 'fatal:', 'requires', 'not found','failed','not supported','invalid'))]
+          for s in (keep or lines[-12:])[-12:]:
+              print('::error::'+s[:800].replace('%','%25'))
+          PYTHON
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: Courier-App-Store-ru

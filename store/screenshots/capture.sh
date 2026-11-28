@@ -27,6 +27,8 @@ cat >>"$work/project.yml" <<'YAML'
       - target: Courier
     settings:
       base:
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_BUNDLE_IDENTIFIER: ru.mise.courier.StoreScreens
         TEST_TARGET_NAME: Courier
         GENERATE_INFOPLIST_FILE: YES
@@ -39,7 +41,8 @@ schemes:
       targets: [StoreScreens]
 YAML
 (cd "$work" && xcodegen generate)
-runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x.get("isAvailable") and ".iOS-" in x["identifier"]]; print(max(r,key=lambda x:tuple(map(int,x["version"].split("."))))["identifier"])')
+sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
+runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x.get("isAvailable") and ".iOS-" in x["identifier"] and x["version"].split(".")[0]==sys.argv[1].split(".")[0]]; print(max(r,key=lambda x:tuple(map(int,x["version"].split("."))))["identifier"])' "$sdk")
 for model in 'iPhone-17-Pro' 'iPhone-16-Pro' 'iPhone-16' 'iPhone-15-Pro'; do
   if udid=$(xcrun simctl create "Courier Store Capture" "com.apple.CoreSimulator.SimDeviceType.$model" "$runtime" 2>/dev/null); then break; fi
 done
@@ -49,7 +52,7 @@ xcrun simctl bootstatus "$udid" -b
 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100
 xcrun simctl ui "$udid" appearance light
 build=(xcodebuild -quiet -project "$work/Courier.xcodeproj" -scheme StoreScreens -destination "platform=iOS Simulator,id=$udid" -derivedDataPath "$work/Build" -parallel-testing-enabled NO)
-"${build[@]}" build-for-testing
+"${build[@]}" -configuration Debug build-for-testing
 xcrun simctl install "$udid" "$work/Build/Build/Products/Debug-iphonesimulator/Курьер.app"
 xcrun simctl privacy "$udid" grant location-always ru.mise.courier
 if ! "${build[@]}" -resultBundlePath "$work/capture.xcresult" test-without-building 2>&1 | tee "$work/uitest.log"; then
